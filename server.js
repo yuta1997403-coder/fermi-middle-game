@@ -21,7 +21,7 @@ let questionBank = JSON.parse(
   fs.readFileSync(path.join(__dirname, 'data', 'questions.json'), 'utf-8')
 );
 let nextQuestionId = Math.max(0, ...questionBank.map((q) => q.id)) + 1;
-let selectedQuestionIds = new Set(questionBank.map((q) => q.id));
+let selectedQuestionIds = new Set(); // 初期状態は全問未選択。進行役が使うお題を選んでいく
 let gameQuestions = []; // host:start時点で選択されていたお題を、そのゲーム終了まで確定させたもの
 
 function defaultTeamName(i) {
