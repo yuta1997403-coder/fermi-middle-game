@@ -1,7 +1,7 @@
 {
   "name": "fermi-middle-game",
   "version": "1.0.0",
-  "description": "フェルミ推定ミドルゲーム - 10人・3チーム向けローカルパーティーゲーム",
+  "description": "どんぶり勘定選手権 - 10人・3チーム向けローカルパーティーゲーム",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

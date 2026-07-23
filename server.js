@@ -371,7 +371,7 @@ io.on('connection', (socket) => {
 
 server.listen(PORT, () => {
   console.log('');
-  console.log(`フェルミ推定ミドルゲーム サーバー起動 (port ${PORT})`);
+  console.log(`どんぶり勘定選手権 サーバー起動 (port ${PORT})`);
 
   const publicUrl = process.env.RENDER_EXTERNAL_URL;
   if (publicUrl) {
