@@ -1,0 +1,14 @@
+{
+  "name": "fermi-middle-game",
+  "version": "1.0.0",
+  "description": "フェルミ推定ミドルゲーム - 10人・3チーム向けローカルパーティーゲーム",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5",
+    "qrcode-terminal": "^0.12.0"
+  }
+}

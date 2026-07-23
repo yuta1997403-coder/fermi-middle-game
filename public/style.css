@@ -1,0 +1,153 @@
+:root {
+  color-scheme: dark;
+  --bg: #12141c;
+  --panel: #1c2030;
+  --text: #f2f3f7;
+  --muted: #9198b0;
+  --accent: #f5a623;
+  --good: #2ecc71;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.wrap {
+  width: 100%;
+  max-width: 960px;
+  padding: 24px 20px 60px;
+}
+
+h1 {
+  font-size: clamp(22px, 4vw, 36px);
+  margin: 0 0 8px;
+}
+
+.muted { color: var(--muted); }
+
+.panel {
+  background: var(--panel);
+  border-radius: 16px;
+  padding: 24px;
+  margin-top: 20px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+
+.timer {
+  font-size: clamp(48px, 10vw, 96px);
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.timer.warn { color: #e74c3c; }
+
+.question {
+  font-size: clamp(22px, 4vw, 32px);
+  font-weight: 600;
+  text-align: center;
+  margin: 12px 0 4px;
+}
+
+.teams-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.team-card {
+  border-radius: 14px;
+  padding: 16px;
+  background: #262b40;
+  border-top: 6px solid var(--team-color, var(--accent));
+}
+
+.team-card h3 { margin: 0 0 6px; }
+
+.team-card .score {
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.team-card .status {
+  margin-top: 8px;
+  font-size: 14px;
+}
+
+.status.ok { color: var(--good); }
+.status.wait { color: var(--muted); }
+
+.answer-value {
+  font-size: 30px;
+  font-weight: 700;
+  margin-top: 6px;
+}
+
+button {
+  font-size: 18px;
+  padding: 14px 24px;
+  border-radius: 12px;
+  border: none;
+  background: var(--accent);
+  color: #1c1c1c;
+  font-weight: 700;
+  cursor: pointer;
+  width: 100%;
+}
+
+button:active { transform: scale(0.98); }
+
+button.secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--muted);
+}
+
+input[type="text"], input[type="number"] {
+  width: 100%;
+  font-size: 22px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid #3a4060;
+  background: #0f1220;
+  color: var(--text);
+  margin-bottom: 12px;
+}
+
+.center { text-align: center; }
+
+.winner {
+  outline: 3px solid var(--good);
+}
+
+.badge {
+  display: inline-block;
+  background: var(--good);
+  color: #06210f;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  margin-left: 8px;
+}
+
+ol.history {
+  padding-left: 20px;
+}
+
+.qr-hint {
+  font-size: 14px;
+  color: var(--muted);
+  text-align: center;
+  margin-top: 8px;
+}
