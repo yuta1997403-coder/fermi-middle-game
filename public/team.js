@@ -69,7 +69,7 @@ function render(state) {
     mainPanel.innerHTML = `
       <p>あなたは <strong style="color:${myTeam.color}">${escapeHtml(myTeam.name)}</strong> です。</p>
       <p class="muted">進行役がゲームを開始するまでお待ちください。</p>
-      <p class="muted">同じチームのメンバー: ${myTeam.players.map(escapeHtml).join(', ')}</p>
+      <p class="muted">同じチームのメンバー: ${myTeam.players.map((p) => escapeHtml(p.name)).join(', ')}</p>
     `;
     return;
   }

@@ -33,6 +33,7 @@ let lastLobbyKey = null;
 let lastSelectedIds = null;
 let latestState = null;
 let joinInfo = null;
+let dragState = null;
 
 fetch('/api/join-info')
   .then((r) => r.json())
@@ -58,7 +59,7 @@ function formatTime(sec) {
 function teamCard(team, options = {}) {
   const isWinner = options.winners && options.winners.includes(team.id);
   const showAnswer = options.showAnswer;
-  const roster = team.players.length > 0 ? team.players.map(escapeHtml).join(', ') : '(まだ誰もいません)';
+  const roster = team.players.length > 0 ? team.players.map((p) => escapeHtml(p.name)).join(', ') : '(まだ誰もいません)';
   return `
     <div class="team-card ${isWinner ? 'winner' : ''}" style="--team-color:${team.color}">
       <h3>${escapeHtml(team.name)} ${isWinner ? '<span class="badge">勝利</span>' : ''}</h3>
@@ -94,6 +95,88 @@ function genreSection({ genre, questions }) {
       </div>
     </details>
   `;
+}
+
+function rosterChipsHtml(team) {
+  if (team.players.length === 0) return '<span class="muted roster-empty">(まだ誰もいません)</span>';
+  return team.players
+    .map((p) => `<span class="player-chip" data-socket-id="${escapeHtml(p.socketId)}">${escapeHtml(p.name)}</span>`)
+    .join('');
+}
+
+function createDragGhost(chipEl, x, y) {
+  const ghost = chipEl.cloneNode(true);
+  ghost.classList.add('chip-ghost');
+  ghost.style.position = 'fixed';
+  ghost.style.left = `${x}px`;
+  ghost.style.top = `${y}px`;
+  ghost.style.pointerEvents = 'none';
+  document.body.appendChild(ghost);
+  return ghost;
+}
+
+function findDropZoneAt(x, y) {
+  const el = document.elementFromPoint(x, y);
+  return el ? el.closest('.roster-dropzone') : null;
+}
+
+function clearDropTargetHighlight() {
+  mainPanel.querySelectorAll('.roster-dropzone.drop-target').forEach((el) => el.classList.remove('drop-target'));
+}
+
+// スマホでのタッチ操作を想定し、HTML標準のdraggable属性ではなくPointer Events(マウス/タッチ/ペン共通)で
+// ドラッグ&ドロップを自前実装する。指でチップをつまんで別チームの枠まで運び、離すと移動する。
+function bindRosterDragEvents() {
+  mainPanel.querySelectorAll('.player-chip').forEach((chip) => {
+    chip.onpointerdown = (e) => {
+      if (dragState) return;
+      const originTeamId = chip.closest('.roster-dropzone').dataset.teamId;
+      dragState = {
+        pointerId: e.pointerId,
+        socketId: chip.dataset.socketId,
+        originTeamId,
+        chipEl: chip,
+        ghostEl: null,
+        startX: e.clientX,
+        startY: e.clientY,
+        dragging: false
+      };
+      chip.setPointerCapture(e.pointerId);
+    };
+
+    chip.onpointermove = (e) => {
+      if (!dragState || dragState.pointerId !== e.pointerId) return;
+      if (!dragState.dragging) {
+        if (Math.abs(e.clientX - dragState.startX) < 6 && Math.abs(e.clientY - dragState.startY) < 6) return;
+        dragState.dragging = true;
+        dragState.chipEl.classList.add('dragging');
+        dragState.ghostEl = createDragGhost(dragState.chipEl, e.clientX, e.clientY);
+      }
+      dragState.ghostEl.style.left = `${e.clientX}px`;
+      dragState.ghostEl.style.top = `${e.clientY}px`;
+      clearDropTargetHighlight();
+      const zone = findDropZoneAt(e.clientX, e.clientY);
+      if (zone) zone.classList.add('drop-target');
+    };
+
+    const endDrag = (e) => {
+      if (!dragState || dragState.pointerId !== e.pointerId) return;
+      const { dragging, socketId, originTeamId, chipEl, ghostEl } = dragState;
+      if (ghostEl) ghostEl.remove();
+      chipEl.classList.remove('dragging');
+      clearDropTargetHighlight();
+      if (dragging) {
+        const zone = findDropZoneAt(e.clientX, e.clientY);
+        const targetTeamId = zone ? zone.dataset.teamId : null;
+        if (targetTeamId && targetTeamId !== originTeamId) {
+          socket.emit('host:movePlayer', { socketId, teamId: targetTeamId });
+        }
+      }
+      dragState = null;
+    };
+    chip.onpointerup = endDrag;
+    chip.onpointercancel = endDrag;
+  });
 }
 
 function timerSettingsPanel(state) {
@@ -225,8 +308,9 @@ function render(state) {
       // 入力中かもしれないテキスト欄(チーム名・新規お題)には触れない
       state.teams.forEach((t) => {
         const el = document.getElementById(`roster-${t.id}`);
-        if (el) el.textContent = t.players.length > 0 ? t.players.join(', ') : '(まだ誰もいません)';
+        if (el) el.innerHTML = rosterChipsHtml(t);
       });
+      bindRosterDragEvents();
 
       if (lastSelectedIds !== selectedIds) {
         lastSelectedIds = selectedIds;
@@ -262,13 +346,15 @@ function render(state) {
           <input type="number" id="teamCountInput" min="2" max="8" value="${state.config.teamCount}" style="width:70px;display:inline-block" />
         </label>
         <button id="applyCountBtn" class="secondary" style="width:auto;display:inline-block;margin-left:8px;padding:8px 16px">チーム数を適用</button>
+        <button id="shuffleTeamsBtn" class="secondary" style="width:auto;display:inline-block;margin-left:8px;padding:8px 16px">チームをシャッフル</button>
       </div>
+      <p class="muted" style="margin:8px 0 0;font-size:14px">参加者の名前をドラッグすると、別のチームに移動できます</p>
       ${timerSettingsPanel(state)}
       <div class="teams-grid" style="margin-top:16px">
         ${state.teams.map((t) => `
           <div class="team-card" style="--team-color:${t.color}">
             <input type="text" class="team-name-input" data-team-id="${t.id}" value="${escapeHtml(t.name)}" maxlength="20" />
-            <div class="muted" id="roster-${t.id}">${t.players.length > 0 ? t.players.map(escapeHtml).join(', ') : '(まだ誰もいません)'}</div>
+            <div class="roster-dropzone" id="roster-${t.id}" data-team-id="${t.id}">${rosterChipsHtml(t)}</div>
           </div>
         `).join('')}
       </div>
@@ -281,6 +367,9 @@ function render(state) {
       const count = document.getElementById('teamCountInput').value;
       socket.emit('host:setTeamCount', { count });
     };
+    document.getElementById('shuffleTeamsBtn').onclick = () => {
+      socket.emit('host:shuffleTeams');
+    };
     mainPanel.querySelectorAll('.team-name-input').forEach((input) => {
       input.onchange = () => {
         socket.emit('host:setTeamName', { teamId: input.dataset.teamId, name: input.value });
@@ -289,6 +378,7 @@ function render(state) {
     bindQuestionBankEvents();
     bindJoinInfoEvents();
     bindTimerSettingsEvents();
+    bindRosterDragEvents();
     const startBtn = document.getElementById('startBtn');
     if (!startBtn.disabled) startBtn.onclick = () => socket.emit('host:start');
     return;

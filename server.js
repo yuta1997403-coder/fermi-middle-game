@@ -80,7 +80,7 @@ function publicState() {
     id: t.id,
     name: t.name,
     color: t.color,
-    players: t.players.map((p) => p.name),
+    players: t.players.map((p) => ({ socketId: p.socketId, name: p.name })),
     submitted: t.submitted,
     score: t.score,
     answer: reveal ? t.answer : null
@@ -207,9 +207,20 @@ function nextOrFinish() {
   }
 }
 
-// 現在参加中の全プレイヤーを、新しいチーム構成に均等に振り直す
-function reassignAllPlayers() {
-  const allPlayers = Object.entries(players).map(([socketId, p]) => ({ socketId, name: p.name }));
+function shuffleArray(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// 現在参加中の全プレイヤーを、チーム構成に均等に振り直す。
+// shuffle: true の場合は割り振り前に順序をシャッフルしてから均等配分する(オールランダム機能用)
+function reassignAllPlayers({ shuffle = false } = {}) {
+  let allPlayers = Object.entries(players).map(([socketId, p]) => ({ socketId, name: p.name }));
+  if (shuffle) allPlayers = shuffleArray(allPlayers);
   for (const t of state.teams) t.players = [];
   for (const p of allPlayers) {
     const teamId = assignTeam();
@@ -281,6 +292,29 @@ io.on('connection', (socket) => {
     team.name = trimmed;
     const idx = state.teams.indexOf(team);
     config.teamNames[idx] = trimmed;
+    broadcast();
+  });
+
+  // 進行役がドラッグで参加者を別チームへ移動させる
+  socket.on('host:movePlayer', ({ socketId, teamId }) => {
+    if (state.phase !== 'lobby') return;
+    const player = players[socketId];
+    if (!player) return;
+    if (player.teamId === teamId) return;
+    const targetTeam = getTeam(teamId);
+    if (!targetTeam) return;
+    const oldTeam = getTeam(player.teamId);
+    if (oldTeam) oldTeam.players = oldTeam.players.filter((p) => p.socketId !== socketId);
+    targetTeam.players.push({ socketId, name: player.name });
+    players[socketId] = { name: player.name, teamId };
+    io.to(socketId).emit('player:assigned', { teamId, teamName: targetTeam.name });
+    broadcast();
+  });
+
+  // オールランダム:現在参加中の全員をシャッフルし、人数バランスよく再配分する
+  socket.on('host:shuffleTeams', () => {
+    if (state.phase !== 'lobby') return;
+    reassignAllPlayers({ shuffle: true });
     broadcast();
   });
 

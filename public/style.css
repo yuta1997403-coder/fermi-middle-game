@@ -245,3 +245,46 @@ ol.history {
 .question-row:last-child {
   border-bottom: none;
 }
+
+.roster-dropzone {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 2.4em;
+  margin-top: 6px;
+  padding: 6px;
+  border: 2px dashed transparent;
+  border-radius: 10px;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.roster-dropzone.drop-target {
+  background: rgba(245, 166, 35, 0.15);
+  border-color: var(--accent);
+}
+
+.roster-empty {
+  padding: 4px 2px;
+}
+
+.player-chip {
+  display: inline-block;
+  background: #333955;
+  color: var(--text);
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 14px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.player-chip.dragging {
+  opacity: 0.35;
+}
+
+.chip-ghost {
+  z-index: 1000;
+  transform: translate(-50%, -50%) scale(1.05);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
