@@ -6,6 +6,12 @@ let myTeamName = null;
 let latestState = null;
 let lastRenderKey = null;
 
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
 function formatTime(sec) {
   const m = Math.floor(sec / 60).toString().padStart(2, '0');
   const s = Math.max(sec, 0) % 60;
@@ -56,19 +62,19 @@ function render(state) {
 
   if (state.phase === 'lobby') {
     mainPanel.innerHTML = `
-      <p>あなたは <strong style="color:${myTeam.color}">${myTeam.name}</strong> です。</p>
+      <p>あなたは <strong style="color:${myTeam.color}">${escapeHtml(myTeam.name)}</strong> です。</p>
       <p class="muted">進行役がゲームを開始するまでお待ちください。</p>
-      <p class="muted">同じチームのメンバー: ${myTeam.players.join(', ')}</p>
+      <p class="muted">同じチームのメンバー: ${myTeam.players.map(escapeHtml).join(', ')}</p>
     `;
     return;
   }
 
   if (state.phase === 'discussing') {
     mainPanel.innerHTML = `
-      <p><strong style="color:${myTeam.color}">${myTeam.name}</strong> として回答します</p>
-      <div class="question">${state.currentQuestion.text}</div>
+      <p><strong style="color:${myTeam.color}">${escapeHtml(myTeam.name)}</strong> として回答します</p>
+      <div class="question">${escapeHtml(state.currentQuestion.text)}</div>
       <div id="timerDisplay" class="timer ${state.timer.remaining <= 30 ? 'warn' : ''}">${formatTime(state.timer.remaining)}</div>
-      <input type="number" id="answerInput" placeholder="推定値を入力(単位:${state.currentQuestion.unit})" />
+      <input type="number" id="answerInput" placeholder="推定値を入力(単位:${escapeHtml(state.currentQuestion.unit)})" />
       <button id="submitBtn">チームの回答として送信</button>
       <p id="submitStatus" class="center ${myTeam.submitted ? 'status ok' : 'status wait'}">${myTeam.submitted ? '✔ 提出済み(締切まで何度でも変更できます)' : 'まだ未提出です'}</p>
     `;
@@ -82,7 +88,7 @@ function render(state) {
 
   if (state.phase === 'locked') {
     mainPanel.innerHTML = `
-      <p><strong style="color:${myTeam.color}">${myTeam.name}</strong></p>
+      <p><strong style="color:${myTeam.color}">${escapeHtml(myTeam.name)}</strong></p>
       <p class="center">回答受付終了。進行役が開示するまでお待ちください。</p>
     `;
     return;
@@ -92,11 +98,11 @@ function render(state) {
     const r = state.lastResult;
     const won = r.winners.includes(myTeamId);
     mainPanel.innerHTML = `
-      <div class="question">${r.question.text}</div>
+      <div class="question">${escapeHtml(r.question.text)}</div>
       <div class="teams-grid">
         ${Object.values(state.teams).map((t) => `
           <div class="team-card ${r.winners.includes(t.id) ? 'winner' : ''}" style="--team-color:${t.color}">
-            <h3>${t.name} ${r.winners.includes(t.id) ? '<span class="badge">勝利</span>' : ''}</h3>
+            <h3>${escapeHtml(t.name)} ${r.winners.includes(t.id) ? '<span class="badge">勝利</span>' : ''}</h3>
             <div class="answer-value">${t.answer === null ? '(未回答)' : t.answer}</div>
             <div class="score">${t.score} pt</div>
           </div>
@@ -114,7 +120,7 @@ function render(state) {
       <div class="teams-grid">
         ${ranked.map((t, i) => `
           <div class="team-card ${i === 0 ? 'winner' : ''}" style="--team-color:${t.color}">
-            <h3>${t.name}</h3>
+            <h3>${escapeHtml(t.name)}</h3>
             <div class="score">${t.score} pt</div>
           </div>
         `).join('')}

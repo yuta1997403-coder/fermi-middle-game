@@ -15,9 +15,13 @@ const COLOR_PALETTE = [
   '#9b59b6', '#1abc9c', '#e67e22', '#34495e'
 ];
 
-const questions = JSON.parse(
+// お題バンク(進行役がロビーで追加・削除・選択できる)。サーバープロセス起動中のみ保持されるメモリ上の状態。
+let questionBank = JSON.parse(
   fs.readFileSync(path.join(__dirname, 'data', 'questions.json'), 'utf-8')
 );
+let nextQuestionId = Math.max(0, ...questionBank.map((q) => q.id)) + 1;
+let selectedQuestionIds = new Set(questionBank.map((q) => q.id));
+let gameQuestions = []; // host:start時点で選択されていたお題を、そのゲーム終了まで確定させたもの
 
 function defaultTeamName(i) {
   return `チーム${String.fromCharCode(65 + i)}`; // A, B, C, ...
@@ -53,7 +57,7 @@ function freshState() {
   return {
     phase: 'lobby', // lobby -> discussing -> locked -> revealed -> (discussing...) -> finished
     roundIndex: -1,
-    totalRounds: questions.length,
+    totalRounds: 0, // host:start時に選択済みお題数で確定する
     currentQuestion: null,
     timer: { duration: ROUND_SECONDS, remaining: ROUND_SECONDS },
     teams: buildTeams(),
@@ -87,7 +91,8 @@ function publicState() {
     teams,
     history: state.history,
     lastResult: state.lastResult,
-    config: { teamCount: config.teamCount, teamNames: state.teams.map((t) => t.name) }
+    config: { teamCount: config.teamCount, teamNames: state.teams.map((t) => t.name) },
+    questionBank: questionBank.map((q) => ({ ...q, selected: selectedQuestionIds.has(q.id) }))
   };
 }
 
@@ -137,7 +142,7 @@ function maybeAutoLock() {
 
 function beginRound(index) {
   state.roundIndex = index;
-  state.currentQuestion = questions[index];
+  state.currentQuestion = gameQuestions[index];
   state.phase = 'discussing';
   state.lastResult = null;
   for (const t of state.teams) {
@@ -261,10 +266,37 @@ io.on('connection', (socket) => {
     broadcast();
   });
 
+  socket.on('host:addQuestion', ({ text, unit }) => {
+    if (state.phase !== 'lobby') return;
+    const trimmedText = (text || '').trim().slice(0, 200);
+    if (!trimmedText) return;
+    const trimmedUnit = (unit || '').trim().slice(0, 20);
+    const q = { id: nextQuestionId++, text: trimmedText, unit: trimmedUnit };
+    questionBank.push(q);
+    selectedQuestionIds.add(q.id);
+    broadcast();
+  });
+
+  socket.on('host:deleteQuestion', ({ id }) => {
+    if (state.phase !== 'lobby') return;
+    questionBank = questionBank.filter((q) => q.id !== id);
+    selectedQuestionIds.delete(id);
+    broadcast();
+  });
+
+  socket.on('host:toggleQuestion', ({ id, selected }) => {
+    if (state.phase !== 'lobby') return;
+    if (selected) selectedQuestionIds.add(id);
+    else selectedQuestionIds.delete(id);
+    broadcast();
+  });
+
   socket.on('host:start', () => {
-    if (state.phase === 'lobby') {
-      beginRound(0);
-    }
+    if (state.phase !== 'lobby') return;
+    gameQuestions = questionBank.filter((q) => selectedQuestionIds.has(q.id));
+    if (gameQuestions.length === 0) return;
+    state.totalRounds = gameQuestions.length;
+    beginRound(0);
   });
 
   socket.on('host:lockNow', () => {
