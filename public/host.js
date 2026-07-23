@@ -1,6 +1,7 @@
 const socket = io();
 const mainPanel = document.getElementById('mainPanel');
 const roundLabel = document.getElementById('roundLabel');
+let lastLobbyKey = null;
 
 function formatTime(sec) {
   const m = Math.floor(sec / 60).toString().padStart(2, '0');
@@ -31,18 +32,52 @@ function render(state) {
       : '準備中';
 
   if (state.phase === 'lobby') {
+    const lobbyKey = JSON.stringify({ count: state.config.teamCount, names: state.config.teamNames });
+
+    if (lastLobbyKey === lobbyKey) {
+      // チーム構成(数・名前)が変わっていなければ、参加者名簿だけ差し替えて
+      // チーム名の入力欄(編集中の可能性がある)には触れない
+      state.teams.forEach((t) => {
+        const el = document.getElementById(`roster-${t.id}`);
+        if (el) el.textContent = t.players.length > 0 ? t.players.join(', ') : '(まだ誰もいません)';
+      });
+      return;
+    }
+    lastLobbyKey = lobbyKey;
+
     mainPanel.innerHTML = `
       <p>各チームはスマホで参加用URLにアクセスしてください(サーバー起動時にターミナルへ表示されたQRコード/URL)。</p>
-      <div class="teams-grid">
-        ${Object.values(state.teams).map((t) => teamCard(t)).join('')}
+      <div>
+        <label>チーム数(2〜8):
+          <input type="number" id="teamCountInput" min="2" max="8" value="${state.config.teamCount}" style="width:70px;display:inline-block" />
+        </label>
+        <button id="applyCountBtn" class="secondary" style="width:auto;display:inline-block;margin-left:8px;padding:8px 16px">チーム数を適用</button>
+      </div>
+      <div class="teams-grid" style="margin-top:16px">
+        ${state.teams.map((t) => `
+          <div class="team-card" style="--team-color:${t.color}">
+            <input type="text" class="team-name-input" data-team-id="${t.id}" value="${t.name}" maxlength="20" />
+            <div class="muted" id="roster-${t.id}">${t.players.length > 0 ? t.players.join(', ') : '(まだ誰もいません)'}</div>
+          </div>
+        `).join('')}
       </div>
       <div style="margin-top:24px">
         <button id="startBtn">ゲーム開始</button>
       </div>
     `;
+    document.getElementById('applyCountBtn').onclick = () => {
+      const count = document.getElementById('teamCountInput').value;
+      socket.emit('host:setTeamCount', { count });
+    };
+    mainPanel.querySelectorAll('.team-name-input').forEach((input) => {
+      input.onchange = () => {
+        socket.emit('host:setTeamName', { teamId: input.dataset.teamId, name: input.value });
+      };
+    });
     document.getElementById('startBtn').onclick = () => socket.emit('host:start');
     return;
   }
+  lastLobbyKey = null;
 
   if (state.phase === 'discussing' || state.phase === 'locked') {
     const warn = state.timer.remaining <= 30;
@@ -73,7 +108,7 @@ function render(state) {
       <div class="teams-grid">
         ${Object.values(state.teams).map((t) => teamCard(t, { winners: r.winners, showAnswer: true })).join('')}
       </div>
-      <p class="center muted">中央値(=平均に一番近い値)を出したチームの勝利。単位:${r.question.unit}</p>
+      <p class="center muted">全チームの回答の平均値に最も近いチームの勝利。単位:${r.question.unit}</p>
       <div style="margin-top:24px">
         <button id="nextBtn">${state.roundIndex + 1 >= state.totalRounds ? '最終結果へ' : '次の問題へ'}</button>
       </div>

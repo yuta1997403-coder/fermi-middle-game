@@ -8,63 +8,76 @@ const os = require('os');
 
 const PORT = process.env.PORT || 3000;
 const ROUND_SECONDS = 5 * 60;
+const MIN_TEAMS = 2;
+const MAX_TEAMS = 8;
+const COLOR_PALETTE = [
+  '#e74c3c', '#3498db', '#2ecc71', '#f39c12',
+  '#9b59b6', '#1abc9c', '#e67e22', '#34495e'
+];
 
 const questions = JSON.parse(
   fs.readFileSync(path.join(__dirname, 'data', 'questions.json'), 'utf-8')
 );
 
-const TEAM_META = {
-  A: { name: 'チームA', color: '#e74c3c' },
-  B: { name: 'チームB', color: '#3498db' },
-  C: { name: 'チームC', color: '#2ecc71' }
+function defaultTeamName(i) {
+  return `チーム${String.fromCharCode(65 + i)}`; // A, B, C, ...
+}
+
+// チーム数・チーム名はラウンドをまたいで保持する設定値(ロビー中のみ変更可)
+let config = {
+  teamCount: 3,
+  teamNames: [defaultTeamName(0), defaultTeamName(1), defaultTeamName(2)]
 };
-const TEAM_IDS = ['A', 'B', 'C'];
+
+function buildTeams() {
+  const teams = [];
+  for (let i = 0; i < config.teamCount; i++) {
+    teams.push({
+      id: `t${i}`,
+      name: config.teamNames[i] || defaultTeamName(i),
+      color: COLOR_PALETTE[i % COLOR_PALETTE.length],
+      players: [],
+      answer: null,
+      submitted: false,
+      score: 0
+    });
+  }
+  return teams;
+}
 
 let state = freshState();
 let players = {}; // socketId -> { name, teamId }
 let timerHandle = null;
 
 function freshState() {
-  const teams = {};
-  for (const id of TEAM_IDS) {
-    teams[id] = {
-      id,
-      name: TEAM_META[id].name,
-      color: TEAM_META[id].color,
-      players: [],
-      answer: null,
-      submitted: false,
-      score: 0
-    };
-  }
   return {
     phase: 'lobby', // lobby -> discussing -> locked -> revealed -> (discussing...) -> finished
     roundIndex: -1,
     totalRounds: questions.length,
     currentQuestion: null,
     timer: { duration: ROUND_SECONDS, remaining: ROUND_SECONDS },
-    teams,
+    teams: buildTeams(),
     history: [],
     lastResult: null
   };
 }
 
+function getTeam(teamId) {
+  return state.teams.find((t) => t.id === teamId);
+}
+
 // 開示前は回答の中身を隠し、提出済みかどうかだけを見せる(せーの開示の緊張感を保つため)
 function publicState() {
   const reveal = state.phase === 'revealed' || state.phase === 'finished';
-  const teams = {};
-  for (const id of TEAM_IDS) {
-    const t = state.teams[id];
-    teams[id] = {
-      id: t.id,
-      name: t.name,
-      color: t.color,
-      players: t.players.map((p) => p.name),
-      submitted: t.submitted,
-      score: t.score,
-      answer: reveal ? t.answer : null
-    };
-  }
+  const teams = state.teams.map((t) => ({
+    id: t.id,
+    name: t.name,
+    color: t.color,
+    players: t.players.map((p) => p.name),
+    submitted: t.submitted,
+    score: t.score,
+    answer: reveal ? t.answer : null
+  }));
   return {
     phase: state.phase,
     roundIndex: state.roundIndex,
@@ -73,7 +86,8 @@ function publicState() {
     timer: state.timer,
     teams,
     history: state.history,
-    lastResult: state.lastResult
+    lastResult: state.lastResult,
+    config: { teamCount: config.teamCount, teamNames: state.teams.map((t) => t.name) }
   };
 }
 
@@ -82,13 +96,11 @@ function broadcast() {
 }
 
 function assignTeam() {
-  let best = TEAM_IDS[0];
-  for (const id of TEAM_IDS) {
-    if (state.teams[id].players.length < state.teams[best].players.length) {
-      best = id;
-    }
+  let best = state.teams[0];
+  for (const t of state.teams) {
+    if (t.players.length < best.players.length) best = t;
   }
-  return best;
+  return best.id;
 }
 
 function clearTimer() {
@@ -118,7 +130,7 @@ function lockRound() {
 }
 
 function maybeAutoLock() {
-  if (TEAM_IDS.every((id) => state.teams[id].submitted)) {
+  if (state.teams.every((t) => t.submitted)) {
     lockRound();
   }
 }
@@ -128,32 +140,36 @@ function beginRound(index) {
   state.currentQuestion = questions[index];
   state.phase = 'discussing';
   state.lastResult = null;
-  for (const id of TEAM_IDS) {
-    state.teams[id].answer = null;
-    state.teams[id].submitted = false;
+  for (const t of state.teams) {
+    t.answer = null;
+    t.submitted = false;
   }
   startRoundTimer();
   broadcast();
 }
 
+// 全チームの回答の平均値に最も近いチームが勝利。
+// チーム数が3のときはこれは「中央値のチームが勝利」と数学的に同じ結果になるが
+// (平均は最小値と最大値の間に収まり、中央値は他の2値より必ず平均に近いため)、
+// チーム数を可変にしても破綻しないよう常に平均最近傍方式で判定する。
 function revealRound() {
   clearTimer();
-  const entries = TEAM_IDS.map((id) => ({
-    id,
-    value: state.teams[id].answer === null ? 0 : state.teams[id].answer
-  })).sort((a, b) => a.value - b.value);
-
-  // 中央値(=3チームの場合は必ず平均値に最も近い値)のチームが勝者。
-  // 同値タイの場合は、中央値と同じ値を出した全チームを勝者として扱う。
-  const medianValue = entries[1].value;
-  const winners = entries.filter((e) => e.value === medianValue).map((e) => e.id);
+  const entries = state.teams.map((t) => ({
+    id: t.id,
+    value: t.answer === null ? 0 : t.answer
+  }));
+  const mean = entries.reduce((sum, e) => sum + e.value, 0) / entries.length;
+  const minDeviation = Math.min(...entries.map((e) => Math.abs(e.value - mean)));
+  const winners = entries
+    .filter((e) => Math.abs(e.value - mean) === minDeviation)
+    .map((e) => e.id);
 
   for (const id of winners) {
-    state.teams[id].score += 1;
+    getTeam(id).score += 1;
   }
 
   const answers = {};
-  for (const id of TEAM_IDS) answers[id] = state.teams[id].answer;
+  for (const t of state.teams) answers[t.id] = t.answer;
 
   const result = {
     round: state.roundIndex,
@@ -177,6 +193,18 @@ function nextOrFinish() {
   }
 }
 
+// 現在参加中の全プレイヤーを、新しいチーム構成に均等に振り直す
+function reassignAllPlayers() {
+  const allPlayers = Object.entries(players).map(([socketId, p]) => ({ socketId, name: p.name }));
+  for (const t of state.teams) t.players = [];
+  for (const p of allPlayers) {
+    const teamId = assignTeam();
+    players[p.socketId] = { name: p.name, teamId };
+    getTeam(teamId).players.push({ socketId: p.socketId, name: p.name });
+    io.to(p.socketId).emit('player:assigned', { teamId, teamName: getTeam(teamId).name });
+  }
+}
+
 const app = express();
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -190,9 +218,9 @@ io.on('connection', (socket) => {
     const trimmed = (name || '').trim().slice(0, 20) || '名無し';
     const teamId = assignTeam();
     players[socket.id] = { name: trimmed, teamId };
-    state.teams[teamId].players.push({ socketId: socket.id, name: trimmed });
+    getTeam(teamId).players.push({ socketId: socket.id, name: trimmed });
     socket.join(`team:${teamId}`);
-    socket.emit('player:assigned', { teamId, teamName: TEAM_META[teamId].name });
+    socket.emit('player:assigned', { teamId, teamName: getTeam(teamId).name });
     broadcast();
   });
 
@@ -202,11 +230,35 @@ io.on('connection', (socket) => {
     if (state.phase !== 'discussing') return;
     const num = Number(value);
     if (!Number.isFinite(num) || num < 0) return;
-    const team = state.teams[player.teamId];
+    const team = getTeam(player.teamId);
     team.answer = num;
     team.submitted = true;
     broadcast();
     maybeAutoLock();
+  });
+
+  socket.on('host:setTeamCount', ({ count }) => {
+    if (state.phase !== 'lobby') return;
+    const n = Math.round(Number(count));
+    if (!Number.isFinite(n) || n < MIN_TEAMS || n > MAX_TEAMS) return;
+    const oldNames = state.teams.map((t) => t.name);
+    config.teamCount = n;
+    config.teamNames = Array.from({ length: n }, (_, i) => oldNames[i] || defaultTeamName(i));
+    state.teams = buildTeams();
+    reassignAllPlayers();
+    broadcast();
+  });
+
+  socket.on('host:setTeamName', ({ teamId, name }) => {
+    if (state.phase !== 'lobby') return;
+    const trimmed = (name || '').trim().slice(0, 20);
+    if (!trimmed) return;
+    const team = getTeam(teamId);
+    if (!team) return;
+    team.name = trimmed;
+    const idx = state.teams.indexOf(team);
+    config.teamNames[idx] = trimmed;
+    broadcast();
   });
 
   socket.on('host:start', () => {
@@ -238,8 +290,8 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     const player = players[socket.id];
     if (!player) return;
-    const team = state.teams[player.teamId];
-    team.players = team.players.filter((p) => p.socketId !== socket.id);
+    const team = getTeam(player.teamId);
+    if (team) team.players = team.players.filter((p) => p.socketId !== socket.id);
     delete players[socket.id];
     broadcast();
   });

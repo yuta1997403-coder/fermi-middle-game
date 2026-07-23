@@ -31,7 +31,8 @@ function render(state) {
     return;
   }
 
-  const myTeam = state.teams[myTeamId];
+  const myTeam = state.teams.find((t) => t.id === myTeamId);
+  if (!myTeam) return; // チーム再編成の直後、player:assignedの反映待ちで一瞬起こりうる
   const key = `${state.phase}:${state.roundIndex}`;
 
   // discussingフェーズはタイマー更新のため毎秒stateが飛んでくる。
