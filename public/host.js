@@ -2,6 +2,17 @@ const socket = io();
 const mainPanel = document.getElementById('mainPanel');
 const roundLabel = document.getElementById('roundLabel');
 let lastLobbyKey = null;
+let latestState = null;
+let joinInfo = null;
+
+fetch('/api/join-info')
+  .then((r) => r.json())
+  .then((info) => {
+    joinInfo = info;
+    lastLobbyKey = null; // 取得完了後にロビー画面を再描画させる
+    if (latestState) render(latestState);
+  })
+  .catch(() => {});
 
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => ({
@@ -75,7 +86,35 @@ function bindQuestionBankEvents() {
   };
 }
 
+function joinInfoPanel() {
+  if (!joinInfo) {
+    return `<div class="panel center muted" style="margin-bottom:16px">参加用URLを読み込み中…</div>`;
+  }
+  return `
+    <div class="panel" style="margin-bottom:16px">
+      <p class="muted" style="margin:0 0 8px">参加者はこのURLにスマホでアクセスしてください:</p>
+      <p class="center" style="word-break:break-all">
+        <a href="${joinInfo.teamUrl}" target="_blank" style="color:var(--accent);font-weight:700">${escapeHtml(joinInfo.teamUrl)}</a>
+      </p>
+      <div class="center"><img src="${joinInfo.qrDataUrl}" alt="参加用QRコード" width="200" height="200" /></div>
+      <button id="copyUrlBtn" class="secondary" style="margin-top:12px">URLをコピー</button>
+    </div>
+  `;
+}
+
+function bindJoinInfoEvents() {
+  const btn = document.getElementById('copyUrlBtn');
+  if (!btn || !joinInfo) return;
+  btn.onclick = () => {
+    navigator.clipboard.writeText(joinInfo.teamUrl).then(() => {
+      btn.textContent = 'コピーしました!';
+      setTimeout(() => { btn.textContent = 'URLをコピー'; }, 1500);
+    });
+  };
+}
+
 function render(state) {
+  latestState = state;
   roundLabel.textContent = state.phase === 'finished'
     ? 'ゲーム終了'
     : state.roundIndex >= 0
@@ -103,7 +142,7 @@ function render(state) {
     const selectedCount = state.questionBank.filter((q) => q.selected).length;
 
     mainPanel.innerHTML = `
-      <p>各チームはスマホで参加用URLにアクセスしてください(サーバー起動時にターミナルへ表示されたQRコード/URL)。</p>
+      ${joinInfoPanel()}
       <div>
         <label>チーム数(2〜8):
           <input type="number" id="teamCountInput" min="2" max="8" value="${state.config.teamCount}" style="width:70px;display:inline-block" />
@@ -133,6 +172,7 @@ function render(state) {
       };
     });
     bindQuestionBankEvents();
+    bindJoinInfoEvents();
     const startBtn = document.getElementById('startBtn');
     if (!startBtn.disabled) startBtn.onclick = () => socket.emit('host:start');
     return;

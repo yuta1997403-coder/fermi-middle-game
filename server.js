@@ -4,6 +4,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const qrcode = require('qrcode-terminal');
+const QRCode = require('qrcode');
 const os = require('os');
 
 const PORT = process.env.PORT || 3000;
@@ -212,6 +213,15 @@ function reassignAllPlayers() {
 
 const app = express();
 app.use(express.static(path.join(__dirname, 'public')));
+
+// 進行役がスマホしか持っていなくても参加用URL/QRを画面上で確認できるようにする
+// (従来はサーバー起動時のターミナル出力しか手段がなかった)
+app.get('/api/join-info', async (req, res) => {
+  const base = process.env.RENDER_EXTERNAL_URL || `${req.protocol}://${req.get('host')}`;
+  const teamUrl = `${base}/team.html`;
+  const qrDataUrl = await QRCode.toDataURL(teamUrl, { margin: 1, width: 240 });
+  res.json({ teamUrl, qrDataUrl });
+});
 
 const server = http.createServer(app);
 const io = new Server(server);
