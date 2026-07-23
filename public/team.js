@@ -5,6 +5,7 @@ let myTeamId = null;
 let myTeamName = null;
 let latestState = null;
 let lastRenderKey = null;
+let joinScreenShown = false;
 
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => ({
@@ -19,6 +20,7 @@ function formatTime(sec) {
 }
 
 function renderJoin() {
+  joinScreenShown = true;
   mainPanel.innerHTML = `
     <p>チーム名を選ばず、あなたの名前だけ入力してください。人数が少ないチームに自動で割り振られます。</p>
     <input type="text" id="nameInput" placeholder="名前(ニックネーム可)" maxlength="20" />
@@ -33,9 +35,12 @@ function renderJoin() {
 function render(state) {
   latestState = state;
   if (!myTeamId) {
-    renderJoin();
+    // 他の参加者の参加や進行役の操作でstateが飛んでくるたびに入力欄を作り直すと、
+    // 名前を入力している最中に文字が消えてしまうため、参加画面は一度だけ描画する
+    if (!joinScreenShown) renderJoin();
     return;
   }
+  joinScreenShown = false;
 
   const myTeam = state.teams.find((t) => t.id === myTeamId);
   if (!myTeam) return; // チーム再編成の直後、player:assignedの反映待ちで一瞬起こりうる
