@@ -4,6 +4,7 @@ const mainPanel = document.getElementById('mainPanel');
 let myTeamId = null;
 let myTeamName = null;
 let latestState = null;
+let lastRenderKey = null;
 
 function formatTime(sec) {
   const m = Math.floor(sec / 60).toString().padStart(2, '0');
@@ -31,6 +32,26 @@ function render(state) {
   }
 
   const myTeam = state.teams[myTeamId];
+  const key = `${state.phase}:${state.roundIndex}`;
+
+  // discussingフェーズはタイマー更新のため毎秒stateが飛んでくる。
+  // 同じラウンドの間はinnerHTMLを丸ごと作り直さず部分更新にとどめ、
+  // 入力欄の文字やフォーカスが毎秒消えてしまうのを防ぐ。
+  if (state.phase === 'discussing' && lastRenderKey === key) {
+    const timerEl = document.getElementById('timerDisplay');
+    if (timerEl) {
+      timerEl.textContent = formatTime(state.timer.remaining);
+      timerEl.classList.toggle('warn', state.timer.remaining <= 30);
+    }
+    const statusEl = document.getElementById('submitStatus');
+    if (statusEl) {
+      statusEl.textContent = myTeam.submitted ? '✔ 提出済み(締切まで何度でも変更できます)' : 'まだ未提出です';
+      statusEl.classList.toggle('ok', myTeam.submitted);
+      statusEl.classList.toggle('wait', !myTeam.submitted);
+    }
+    return;
+  }
+  lastRenderKey = key;
 
   if (state.phase === 'lobby') {
     mainPanel.innerHTML = `
@@ -45,10 +66,10 @@ function render(state) {
     mainPanel.innerHTML = `
       <p><strong style="color:${myTeam.color}">${myTeam.name}</strong> として回答します</p>
       <div class="question">${state.currentQuestion.text}</div>
-      <div class="timer ${state.timer.remaining <= 30 ? 'warn' : ''}">${formatTime(state.timer.remaining)}</div>
+      <div id="timerDisplay" class="timer ${state.timer.remaining <= 30 ? 'warn' : ''}">${formatTime(state.timer.remaining)}</div>
       <input type="number" id="answerInput" placeholder="推定値を入力(単位:${state.currentQuestion.unit})" />
       <button id="submitBtn">チームの回答として送信</button>
-      <p class="center ${myTeam.submitted ? 'status ok' : 'status wait'}">${myTeam.submitted ? '✔ 提出済み(締切まで何度でも変更できます)' : 'まだ未提出です'}</p>
+      <p id="submitStatus" class="center ${myTeam.submitted ? 'status ok' : 'status wait'}">${myTeam.submitted ? '✔ 提出済み(締切まで何度でも変更できます)' : 'まだ未提出です'}</p>
     `;
     document.getElementById('submitBtn').onclick = () => {
       const value = document.getElementById('answerInput').value;
