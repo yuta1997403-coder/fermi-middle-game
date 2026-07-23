@@ -2,6 +2,7 @@ const socket = io();
 const mainPanel = document.getElementById('mainPanel');
 const roundLabel = document.getElementById('roundLabel');
 let lastLobbyKey = null;
+let lastSelectedIds = null;
 let latestState = null;
 let joinInfo = null;
 
@@ -46,7 +47,7 @@ function questionBankPanel(state) {
   const selectedCount = state.questionBank.filter((q) => q.selected).length;
   return `
     <div class="panel" style="margin-top:16px">
-      <h3 style="margin-top:0">お題(全${state.questionBank.length}問中 ${selectedCount}問を選択中)</h3>
+      <h3 id="questionBankHeader" style="margin-top:0">お題(全${state.questionBank.length}問中 ${selectedCount}問を選択中)</h3>
       <div style="max-height:280px;overflow-y:auto">
         ${state.questionBank.map((q) => `
           <label style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #333955;cursor:pointer">
@@ -122,22 +123,43 @@ function render(state) {
       : '準備中';
 
   if (state.phase === 'lobby') {
+    // お題の選択(checked)状態はここに含めない: チェック操作のたびにリスト全体を
+    // 作り直すとスクロール位置が先頭に飛んでしまうため、選択状態は別途部分更新する
     const lobbyKey = JSON.stringify({
       count: state.config.teamCount,
       names: state.config.teamNames,
-      bank: state.questionBank
+      bank: state.questionBank.map((q) => ({ id: q.id, text: q.text, unit: q.unit }))
     });
+    const selectedIds = state.questionBank.filter((q) => q.selected).map((q) => q.id).sort().join(',');
 
     if (lastLobbyKey === lobbyKey) {
-      // チーム構成・お題バンクが変わっていなければ、参加者名簿だけ差し替えて
+      // チーム構成・お題バンクの中身が変わっていなければ、参加者名簿だけ差し替えて
       // 入力中かもしれないテキスト欄(チーム名・新規お題)には触れない
       state.teams.forEach((t) => {
         const el = document.getElementById(`roster-${t.id}`);
         if (el) el.textContent = t.players.length > 0 ? t.players.join(', ') : '(まだ誰もいません)';
       });
+
+      if (lastSelectedIds !== selectedIds) {
+        lastSelectedIds = selectedIds;
+        const selectedCount = state.questionBank.filter((q) => q.selected).length;
+        mainPanel.querySelectorAll('.question-toggle').forEach((el) => {
+          const q = state.questionBank.find((q) => q.id === Number(el.dataset.qid));
+          if (q) el.checked = q.selected;
+        });
+        const header = document.getElementById('questionBankHeader');
+        if (header) header.textContent = `お題(全${state.questionBank.length}問中 ${selectedCount}問を選択中)`;
+        const startBtn = document.getElementById('startBtn');
+        if (startBtn) {
+          startBtn.disabled = selectedCount === 0;
+          startBtn.textContent = selectedCount === 0 ? 'お題を1問以上選択してください' : 'ゲーム開始';
+          startBtn.onclick = selectedCount === 0 ? null : () => socket.emit('host:start');
+        }
+      }
       return;
     }
     lastLobbyKey = lobbyKey;
+    lastSelectedIds = selectedIds;
 
     const selectedCount = state.questionBank.filter((q) => q.selected).length;
 
