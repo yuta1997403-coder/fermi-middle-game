@@ -246,6 +246,18 @@ io.on('connection', (socket) => {
 });
 
 server.listen(PORT, () => {
+  console.log('');
+  console.log(`フェルミ推定ミドルゲーム サーバー起動 (port ${PORT})`);
+
+  const publicUrl = process.env.RENDER_EXTERNAL_URL;
+  if (publicUrl) {
+    console.log(`進行役の画面: ${publicUrl}/host.html`);
+    console.log(`参加者用URL: ${publicUrl}/team.html`);
+    qrcode.generate(`${publicUrl}/team.html`, { small: true });
+    console.log('');
+    return;
+  }
+
   const nets = os.networkInterfaces();
   const addresses = [];
   for (const name of Object.keys(nets)) {
@@ -253,8 +265,6 @@ server.listen(PORT, () => {
       if (net.family === 'IPv4' && !net.internal) addresses.push(net.address);
     }
   }
-  console.log('');
-  console.log(`フェルミ推定ミドルゲーム サーバー起動: http://localhost:${PORT}`);
   console.log('進行役の画面(共有ディスプレイ用):');
   console.log(`  http://localhost:${PORT}/host.html`);
   addresses.forEach((addr) => {
