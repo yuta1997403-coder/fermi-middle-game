@@ -28,10 +28,12 @@ function defaultTeamName(i) {
   return `チーム${String.fromCharCode(65 + i)}`; // A, B, C, ...
 }
 
-// チーム数・チーム名はラウンドをまたいで保持する設定値(ロビー中のみ変更可)
+// チーム数・チーム名・タイマー設定はラウンドをまたいで保持する設定値(ロビー中のみ変更可)
 let config = {
   teamCount: 3,
-  teamNames: [defaultTeamName(0), defaultTeamName(1), defaultTeamName(2)]
+  teamNames: [defaultTeamName(0), defaultTeamName(1), defaultTeamName(2)],
+  timerEnabled: true,
+  timerSeconds: ROUND_SECONDS
 };
 
 function buildTeams() {
@@ -60,7 +62,7 @@ function freshState() {
     roundIndex: -1,
     totalRounds: 0, // host:start時に選択済みお題数で確定する
     currentQuestion: null,
-    timer: { duration: ROUND_SECONDS, remaining: ROUND_SECONDS },
+    timer: { duration: config.timerSeconds, remaining: config.timerSeconds, enabled: config.timerEnabled },
     teams: buildTeams(),
     history: [],
     lastResult: null
@@ -92,7 +94,12 @@ function publicState() {
     teams,
     history: state.history,
     lastResult: state.lastResult,
-    config: { teamCount: config.teamCount, teamNames: state.teams.map((t) => t.name) },
+    config: {
+      teamCount: config.teamCount,
+      teamNames: state.teams.map((t) => t.name),
+      timerEnabled: config.timerEnabled,
+      timerSeconds: config.timerSeconds
+    },
     questionBank: questionBank.map((q) => ({ ...q, selected: selectedQuestionIds.has(q.id) }))
   };
 }
@@ -118,7 +125,8 @@ function clearTimer() {
 
 function startRoundTimer() {
   clearTimer();
-  state.timer = { duration: ROUND_SECONDS, remaining: ROUND_SECONDS };
+  state.timer = { duration: config.timerSeconds, remaining: config.timerSeconds, enabled: config.timerEnabled };
+  if (!config.timerEnabled) return; // タイマーなしモードでは自動締切せず、手動締切/全チーム提出待ちにする
   timerHandle = setInterval(() => {
     state.timer.remaining -= 1;
     if (state.timer.remaining <= 0) {
@@ -273,6 +281,15 @@ io.on('connection', (socket) => {
     team.name = trimmed;
     const idx = state.teams.indexOf(team);
     config.teamNames[idx] = trimmed;
+    broadcast();
+  });
+
+  socket.on('host:setTimer', ({ enabled, seconds }) => {
+    if (state.phase !== 'lobby') return;
+    const n = Math.round(Number(seconds));
+    if (!Number.isFinite(n) || n <= 0 || n > 3600) return;
+    config.timerEnabled = !!enabled;
+    config.timerSeconds = n;
     broadcast();
   });
 

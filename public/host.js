@@ -8,6 +8,15 @@ const GENRE_ORDER = [
   'スポーツ・エンタメ', 'テクノロジー・IT', 'お金・経済', '歴史・文化', '宇宙・科学'
 ];
 
+const TIMER_PRESETS = [
+  { label: 'タイマーなし', enabled: false, seconds: 300 },
+  { label: '1分', enabled: true, seconds: 60 },
+  { label: '2分', enabled: true, seconds: 120 },
+  { label: '3分', enabled: true, seconds: 180 },
+  { label: '5分', enabled: true, seconds: 300 },
+  { label: '10分', enabled: true, seconds: 600 }
+];
+
 function groupByGenre(questionBank) {
   const groups = new Map();
   for (const q of questionBank) {
@@ -87,6 +96,21 @@ function genreSection({ genre, questions }) {
   `;
 }
 
+function timerSettingsPanel(state) {
+  const buttons = TIMER_PRESETS.map((p) => {
+    const isActive = p.enabled
+      ? state.config.timerEnabled && state.config.timerSeconds === p.seconds
+      : !state.config.timerEnabled;
+    return `<button type="button" class="secondary timer-preset-btn ${isActive ? 'active' : ''}" data-enabled="${p.enabled}" data-seconds="${p.seconds}">${p.label}</button>`;
+  }).join('');
+  return `
+    <div style="margin-top:16px">
+      <p class="muted" style="margin:0 0 8px">タイマー:</p>
+      <div class="timer-presets">${buttons}</div>
+    </div>
+  `;
+}
+
 function questionBankPanel(state) {
   const selectedCount = state.questionBank.filter((q) => q.selected).length;
   const genreOptions = GENRE_ORDER.map((g) => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
@@ -138,6 +162,17 @@ function bindQuestionBankEvents() {
   };
 }
 
+function bindTimerSettingsEvents() {
+  mainPanel.querySelectorAll('.timer-preset-btn').forEach((el) => {
+    el.onclick = () => {
+      socket.emit('host:setTimer', {
+        enabled: el.dataset.enabled === 'true',
+        seconds: Number(el.dataset.seconds)
+      });
+    };
+  });
+}
+
 function joinInfoPanel() {
   if (!joinInfo) {
     return `<div class="panel center muted" style="margin-bottom:16px">参加用URLを読み込み中…</div>`;
@@ -179,6 +214,8 @@ function render(state) {
     const lobbyKey = JSON.stringify({
       count: state.config.teamCount,
       names: state.config.teamNames,
+      timerEnabled: state.config.timerEnabled,
+      timerSeconds: state.config.timerSeconds,
       bank: state.questionBank.map((q) => ({ id: q.id, text: q.text, unit: q.unit }))
     });
     const selectedIds = state.questionBank.filter((q) => q.selected).map((q) => q.id).sort().join(',');
@@ -226,6 +263,7 @@ function render(state) {
         </label>
         <button id="applyCountBtn" class="secondary" style="width:auto;display:inline-block;margin-left:8px;padding:8px 16px">チーム数を適用</button>
       </div>
+      ${timerSettingsPanel(state)}
       <div class="teams-grid" style="margin-top:16px">
         ${state.teams.map((t) => `
           <div class="team-card" style="--team-color:${t.color}">
@@ -250,6 +288,7 @@ function render(state) {
     });
     bindQuestionBankEvents();
     bindJoinInfoEvents();
+    bindTimerSettingsEvents();
     const startBtn = document.getElementById('startBtn');
     if (!startBtn.disabled) startBtn.onclick = () => socket.emit('host:start');
     return;
@@ -257,10 +296,10 @@ function render(state) {
   lastLobbyKey = null;
 
   if (state.phase === 'discussing' || state.phase === 'locked') {
-    const warn = state.timer.remaining <= 30;
+    const warn = state.timer.enabled && state.timer.remaining <= 30;
     mainPanel.innerHTML = `
       <div class="question">${escapeHtml(state.currentQuestion.text)}</div>
-      <div class="timer ${warn ? 'warn' : ''}">${formatTime(state.timer.remaining)}</div>
+      ${state.timer.enabled ? `<div class="timer ${warn ? 'warn' : ''}">${formatTime(state.timer.remaining)}</div>` : ''}
       <div class="teams-grid">
         ${Object.values(state.teams).map((t) => teamCard(t)).join('')}
       </div>

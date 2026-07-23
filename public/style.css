@@ -152,6 +152,24 @@ ol.history {
   margin-top: 8px;
 }
 
+.timer-presets {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.timer-preset-btn {
+  width: auto;
+  padding: 10px 16px;
+  font-size: 14px;
+}
+
+.timer-preset-btn.active {
+  background: var(--accent);
+  color: #1c1c1c;
+  border-color: var(--accent);
+}
+
 .genre-list {
   margin-top: 12px;
   display: flex;

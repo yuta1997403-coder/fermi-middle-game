@@ -78,7 +78,7 @@ function render(state) {
     mainPanel.innerHTML = `
       <p><strong style="color:${myTeam.color}">${escapeHtml(myTeam.name)}</strong> として回答します</p>
       <div class="question">${escapeHtml(state.currentQuestion.text)}</div>
-      <div id="timerDisplay" class="timer ${state.timer.remaining <= 30 ? 'warn' : ''}">${formatTime(state.timer.remaining)}</div>
+      ${state.timer.enabled ? `<div id="timerDisplay" class="timer ${state.timer.remaining <= 30 ? 'warn' : ''}">${formatTime(state.timer.remaining)}</div>` : ''}
       <input type="number" id="answerInput" placeholder="推定値を入力(単位:${escapeHtml(state.currentQuestion.unit)})" />
       <button id="submitBtn">チームの回答として送信</button>
       <p id="submitStatus" class="center ${myTeam.submitted ? 'status ok' : 'status wait'}">${myTeam.submitted ? '✔ 提出済み(締切まで何度でも変更できます)' : 'まだ未提出です'}</p>
