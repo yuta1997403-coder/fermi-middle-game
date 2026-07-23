@@ -276,14 +276,27 @@ io.on('connection', (socket) => {
     broadcast();
   });
 
-  socket.on('host:addQuestion', ({ text, unit }) => {
+  socket.on('host:addQuestion', ({ text, unit, genre }) => {
     if (state.phase !== 'lobby') return;
     const trimmedText = (text || '').trim().slice(0, 200);
     if (!trimmedText) return;
     const trimmedUnit = (unit || '').trim().slice(0, 20);
-    const q = { id: nextQuestionId++, text: trimmedText, unit: trimmedUnit };
+    const trimmedGenre = (genre || '').trim().slice(0, 20) || 'その他';
+    const q = { id: nextQuestionId++, text: trimmedText, unit: trimmedUnit, genre: trimmedGenre };
     questionBank.push(q);
     selectedQuestionIds.add(q.id);
+    broadcast();
+  });
+
+  // ジャンル単位での一括選択/解除(1問ずつtoggleするとブロードキャストが連発して
+  // チェックボックスがちらつくため、まとめて1回のbroadcastにする)
+  socket.on('host:setGenreSelection', ({ genre, selected }) => {
+    if (state.phase !== 'lobby') return;
+    questionBank.forEach((q) => {
+      if (q.genre !== genre) return;
+      if (selected) selectedQuestionIds.add(q.id);
+      else selectedQuestionIds.delete(q.id);
+    });
     broadcast();
   });
 

@@ -151,3 +151,79 @@ ol.history {
   text-align: center;
   margin-top: 8px;
 }
+
+.genre-list {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.genre-section {
+  background: #232840;
+  border-radius: 10px;
+  padding: 4px 12px;
+}
+
+.genre-section summary {
+  cursor: pointer;
+  padding: 12px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  list-style: none;
+}
+
+.genre-section summary::-webkit-details-marker { display: none; }
+
+.genre-section summary::before {
+  content: "▸";
+  margin-right: 8px;
+  color: var(--muted);
+}
+
+.genre-section[open] summary::before {
+  content: "▾";
+}
+
+.genre-title {
+  font-weight: 700;
+}
+
+.genre-count {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.genre-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 0 4px 8px;
+}
+
+.genre-toolbar button {
+  width: auto;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.genre-questions {
+  max-height: 260px;
+  overflow-y: auto;
+  padding-bottom: 8px;
+}
+
+.question-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 4px;
+  border-bottom: 1px solid #333955;
+  cursor: pointer;
+}
+
+.question-row:last-child {
+  border-bottom: none;
+}

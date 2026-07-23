@@ -1,6 +1,25 @@
 const socket = io();
 const mainPanel = document.getElementById('mainPanel');
 const roundLabel = document.getElementById('roundLabel');
+
+// 表示順の基準。ここにないジャンル(手動追加された未知のジャンル名など)は末尾にまとめる
+const GENRE_ORDER = [
+  '日常生活・身の回り', '自然・生き物', '都市・建造物', '乗り物・移動', '食べ物・飲み物',
+  'スポーツ・エンタメ', 'テクノロジー・IT', 'お金・経済', '歴史・文化', '宇宙・科学'
+];
+
+function groupByGenre(questionBank) {
+  const groups = new Map();
+  for (const q of questionBank) {
+    if (!groups.has(q.genre)) groups.set(q.genre, []);
+    groups.get(q.genre).push(q);
+  }
+  const orderedGenres = [
+    ...GENRE_ORDER.filter((g) => groups.has(g)),
+    ...[...groups.keys()].filter((g) => !GENRE_ORDER.includes(g))
+  ];
+  return orderedGenres.map((genre) => ({ genre, questions: groups.get(genre) }));
+}
 let lastLobbyKey = null;
 let lastSelectedIds = null;
 let latestState = null;
@@ -43,23 +62,44 @@ function teamCard(team, options = {}) {
   `;
 }
 
+function genreSection({ genre, questions }) {
+  const selectedCount = questions.filter((q) => q.selected).length;
+  return `
+    <details class="genre-section">
+      <summary>
+        <span class="genre-title">${escapeHtml(genre)}</span>
+        <span class="muted genre-count" data-genre-count="${escapeHtml(genre)}">${selectedCount}/${questions.length}問選択中</span>
+      </summary>
+      <div class="genre-toolbar">
+        <button type="button" class="secondary genre-select-all" data-genre="${escapeHtml(genre)}">このジャンルを全選択</button>
+        <button type="button" class="secondary genre-select-none" data-genre="${escapeHtml(genre)}">このジャンルを全解除</button>
+      </div>
+      <div class="genre-questions">
+        ${questions.map((q) => `
+          <label class="question-row">
+            <input type="checkbox" class="question-toggle" data-qid="${q.id}" ${q.selected ? 'checked' : ''} style="width:auto" />
+            <span style="flex:1">${escapeHtml(q.text)} <span class="muted">(${escapeHtml(q.unit)})</span></span>
+            <button type="button" class="secondary question-delete" data-qid="${q.id}" style="width:auto;padding:6px 12px;font-size:14px">削除</button>
+          </label>
+        `).join('')}
+      </div>
+    </details>
+  `;
+}
+
 function questionBankPanel(state) {
   const selectedCount = state.questionBank.filter((q) => q.selected).length;
+  const genreOptions = GENRE_ORDER.map((g) => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
   return `
     <div class="panel" style="margin-top:16px">
       <h3 id="questionBankHeader" style="margin-top:0">お題(全${state.questionBank.length}問中 ${selectedCount}問を選択中)</h3>
-      <div style="max-height:280px;overflow-y:auto">
-        ${state.questionBank.map((q) => `
-          <label style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #333955;cursor:pointer">
-            <input type="checkbox" class="question-toggle" data-qid="${q.id}" ${q.selected ? 'checked' : ''} style="width:auto" />
-            <span style="flex:1">${escapeHtml(q.text)} <span class="muted">(${escapeHtml(q.unit)})</span></span>
-            <button class="secondary question-delete" data-qid="${q.id}" style="width:auto;padding:6px 12px;font-size:14px">削除</button>
-          </label>
-        `).join('')}
+      <div class="genre-list">
+        ${groupByGenre(state.questionBank).map(genreSection).join('')}
       </div>
       <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start">
         <input type="text" id="newQuestionText" placeholder="新しいお題の文章" style="flex:2;min-width:200px;margin-bottom:0" />
         <input type="text" id="newQuestionUnit" placeholder="単位(例: 個)" style="flex:1;min-width:100px;margin-bottom:0" />
+        <select id="newQuestionGenre" style="flex:1;min-width:160px;margin-bottom:0">${genreOptions}</select>
         <button id="addQuestionBtn" style="width:auto;padding:12px 20px;white-space:nowrap">お題を追加</button>
       </div>
     </div>
@@ -77,11 +117,22 @@ function bindQuestionBankEvents() {
       socket.emit('host:deleteQuestion', { id: Number(el.dataset.qid) });
     };
   });
+  mainPanel.querySelectorAll('.genre-select-all').forEach((el) => {
+    el.onclick = () => {
+      socket.emit('host:setGenreSelection', { genre: el.dataset.genre, selected: true });
+    };
+  });
+  mainPanel.querySelectorAll('.genre-select-none').forEach((el) => {
+    el.onclick = () => {
+      socket.emit('host:setGenreSelection', { genre: el.dataset.genre, selected: false });
+    };
+  });
   document.getElementById('addQuestionBtn').onclick = () => {
     const text = document.getElementById('newQuestionText').value;
     const unit = document.getElementById('newQuestionUnit').value;
+    const genre = document.getElementById('newQuestionGenre').value;
     if (!text.trim()) return;
-    socket.emit('host:addQuestion', { text, unit });
+    socket.emit('host:addQuestion', { text, unit, genre });
     document.getElementById('newQuestionText').value = '';
     document.getElementById('newQuestionUnit').value = '';
   };
@@ -149,6 +200,10 @@ function render(state) {
         });
         const header = document.getElementById('questionBankHeader');
         if (header) header.textContent = `お題(全${state.questionBank.length}問中 ${selectedCount}問を選択中)`;
+        groupByGenre(state.questionBank).forEach(({ genre, questions }) => {
+          const countEl = mainPanel.querySelector(`[data-genre-count="${CSS.escape(genre)}"]`);
+          if (countEl) countEl.textContent = `${questions.filter((q) => q.selected).length}/${questions.length}問選択中`;
+        });
         const startBtn = document.getElementById('startBtn');
         if (startBtn) {
           startBtn.disabled = selectedCount === 0;
